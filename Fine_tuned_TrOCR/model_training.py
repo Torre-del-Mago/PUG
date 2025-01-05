@@ -2,7 +2,7 @@ from transformers import TrOCRProcessor, AdamW
 import torch
 from transformers import VisionEncoderDecoderModel
 from tqdm.notebook import tqdm
-from eval_metric import compute_cer
+from Fine_tuned_TrOCR.eval_metric import compute_cer
 
 def load_processor(path):
     """
@@ -17,7 +17,7 @@ def load_processor(path):
     processor = TrOCRProcessor.from_pretrained(path)
     return processor
 
-def load_model(path):
+def load_model(path, device):
     """
     Load the VisionEncoderDecoderModel from the given path.
 
@@ -27,8 +27,6 @@ def load_model(path):
     Returns:
         VisionEncoderDecoderModel: The loaded VisionEncoderDecoderModel.
     """
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
     model = VisionEncoderDecoderModel.from_pretrained(path)
     model.to(device)
     return model

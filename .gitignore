@@ -169,3 +169,7 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+.vscode
+splits/
+craft_mlt_25k.pth

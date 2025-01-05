@@ -36,13 +36,13 @@ def process_image(img):
 
   return rotated
 
-def load_models():
+def load_models(path_trOCR):
   
   """
   Loading TrOCR model which has achieved SOTA metrics on IAM handwriting dataset
   """
-  processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten")
-  model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten")
+  processor = TrOCRProcessor.from_pretrained(path_trOCR)
+  model = VisionEncoderDecoderModel.from_pretrained(path_trOCR)
   craft = Craft(output_dir=None, 
                 crop_type="poly",
                 export_extra=False,
