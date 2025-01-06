@@ -1,7 +1,7 @@
 import os
 import json
 from torch.utils.data import Dataset
-from craft_hw_ocr.craft_hw_ocr.OCR import * 
+from craft_hw_ocr.OCR import * 
 
 class CraftDataset(Dataset):
     def __init__(self, base_path, split="training"):
@@ -31,7 +31,14 @@ class CraftDataset(Dataset):
 
         # img = process_image(img)
 
+        bboxes = self.data[idx]["bbox"]
         transcription = self.data[idx]["transcription"]
 
+        regions = []
+        for bbox in bboxes:
+            x, y, w, h = bbox["x"], bbox["y"], bbox["width"], bbox["height"]
+            cropped_region = img[int(y):int(y+h), int(x):int(x+w)]  # Wycinamy region tekstowy
+            regions.append(cropped_region)
+
         # Zwróć obraz i regiony
-        return img, transcription
+        return img, regions, transcription

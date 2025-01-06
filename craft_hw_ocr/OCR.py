@@ -4,6 +4,7 @@ import torch
 from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 from PIL import Image
 from craft_text_detector import Craft
+import numpy as np
 
 
 def load_image(path):
@@ -36,13 +37,14 @@ def process_image(img):
 
   return rotated
 
-def load_models(path_trOCR):
+def load_models(path_trOCR, device):
   
   """
   Loading TrOCR model which has achieved SOTA metrics on IAM handwriting dataset
   """
   processor = TrOCRProcessor.from_pretrained(path_trOCR)
   model = VisionEncoderDecoderModel.from_pretrained(path_trOCR)
+  model.to(device)
   craft = Craft(output_dir=None, 
                 crop_type="poly",
                 export_extra=False,
@@ -63,7 +65,7 @@ def detection(img, craft):
   return img, prediction_result
 
 
-def recoginition(img, prediction_result, processor, model):
+def recoginition(img, prediction_result, processor, model, device):
   
   """
   OCR using TrOCR
@@ -73,13 +75,13 @@ def recoginition(img, prediction_result, processor, model):
     roi = img[int(prediction_result['boxes'][i][0][1]): int(prediction_result['boxes'][i][2][1]), 
               int(prediction_result['boxes'][i][0][0]): int(prediction_result['boxes'][i][2][0])]
     image = Image.fromarray(roi).convert("RGB")
-    pixel_values = processor(image, return_tensors="pt").pixel_values
+    pixel_values = processor(image, return_tensors="pt").pixel_values.to(device)
     generated_ids = model.generate(pixel_values)
     generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
     text.append(generated_text)
-    print('line ' + str(i) + ' has been recoginized')
+    # print('line ' + str(i) + ' has been recoginized')
     
-  return prediction_result['boxes'], ('\n').join(text)
+  return prediction_result['boxes'], text
 
 
 def visualize(img, prediction_result):
@@ -95,3 +97,17 @@ def visualize(img, prediction_result):
     cv2.rectangle(img, (x1, y1), (x2, y2), (255,0,0), 2)
 
   return Image.fromarray(img)
+
+def save_image(image, path):
+    """
+    Saving an image to the specified path.
+    
+    Args:
+        image (numpy.ndarray): Image array to save.
+        path (str): Path where the image will be saved.
+    Returns:
+        bool: True if the image is successfully saved, False otherwise.
+    """
+    if isinstance(image, Image.Image):  # Check if it's a PIL image
+        image = np.array(image)  # Convert PIL image to NumPy array
+    return cv2.imwrite(path, image)

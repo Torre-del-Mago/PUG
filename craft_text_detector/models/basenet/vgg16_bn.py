@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.nn.init as init
 from torchvision import models
 
+from collections import namedtuple
+
 
 def init_weights(modules):
     for m in modules:

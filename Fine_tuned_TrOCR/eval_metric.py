@@ -1,6 +1,6 @@
 from datasets import load_metric
 
-cer_metric = load_metric("cer")
+cer_metric = load_metric("cer", revision="master")
 def compute_cer(pred_ids, label_ids, processor):
     """
     Compute the Character Error Rate (CER) between predicted and label sequences.
