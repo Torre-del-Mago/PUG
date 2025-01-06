@@ -10,9 +10,11 @@ from torch.utils.tensorboard import SummaryWriter
 from transformers import logging
 from checkpoint import *
 import warnings
+import numpy as np
 
 logging.set_verbosity_error()
 warnings.simplefilter(action='ignore', category=FutureWarning)
+warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
 
 def log_hparams(writer, trOCR_train_config, avg_train_loss, avg_valid_cer, loop_idx):
     """Logging hyperparameters and results to TensorBoard."""
@@ -273,8 +275,8 @@ def run_experiments():
     
     
     hparams_combinations = [
-        {"id": 1, "batch_size": 8, "lr": 0.001, "num_epochs": 50, "max_target_length": 128},
-        {"id": 2, "batch_size": 4, "lr": 0.01, "num_epochs": 25, "max_target_length": 128},
+        {"id": 1, "batch_size": 8, "lr": 0.001, "num_epochs": 20, "max_target_length": 128},
+        {"id": 2, "batch_size": 4, "lr": 0.01, "num_epochs": 20, "max_target_length": 128},
     ]
     
     for config in hparams_combinations:
