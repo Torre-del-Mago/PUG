@@ -177,3 +177,4 @@ train/*
 runs/*
 *.zip
 *.png
+checkpoints/*

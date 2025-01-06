@@ -7,9 +7,17 @@ from torch.utils.data import DataLoader
 from OCR_dataset import OCRDataset
 from craft_dataset import CraftDataset
 from torch.utils.tensorboard import SummaryWriter
+from transformers import logging
+from checkpoint import *
+import warnings
+import numpy as np
+
+logging.set_verbosity_error()
+warnings.simplefilter(action='ignore', category=FutureWarning)
+warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
 
 def log_hparams(writer, trOCR_train_config, avg_train_loss, avg_valid_cer, loop_idx):
-    """Logowanie hiperparametrów i wyników do TensorBoard."""
+    """Logging hyperparameters and results to TensorBoard."""
     
     hparams = {
         'batch_size': trOCR_train_config["batch_size"],
@@ -18,13 +26,13 @@ def log_hparams(writer, trOCR_train_config, avg_train_loss, avg_valid_cer, loop_
         'max_target_length': trOCR_train_config["max_target_length"]
     }
     
-    # Dodajemy hiperparametry oraz wyniki
+    # Add hyperparameters and results
     metrics = {
         'train_loss': avg_train_loss,
         'valid_cer': avg_valid_cer
     }
     
-    # Logowanie hparams oraz metryk
+    # Log hparams and metrics
     writer.add_hparams(hparams, metrics, global_step=loop_idx)
 
 
@@ -88,6 +96,20 @@ def train(config_trOCR):
     writer = SummaryWriter(log_dir="runs/training_logs")
 
     loop_idx = 0
+
+    # Optionally load from checkpoint
+    checkpoint_dir = "checkpoints"
+    checkpoint_files = os.listdir(checkpoint_dir)
+    checkpoint_file_id = f"checkpoint_{config_trOCR['id']}.pth"
+
+    if checkpoint_file_id in checkpoint_files:
+        checkpoint_path = os.path.join(checkpoint_dir, checkpoint_file)
+        start_epoch, avg_train_loss, avg_valid_cer = load_checkpoint(model, optimizer, checkpoint_path)
+        loop_idx = start_epoch  # Continue from the last epoch
+    else:
+        print(f"Checkpoint {checkpoint_file_id} not found. Starting training from scratch.")
+        loop_idx = 0
+
     while True:
         
         ### TRAIN TROCR
@@ -95,11 +117,11 @@ def train(config_trOCR):
             model.train()
             train_loss = 0.0
             for batch_idx, batch in enumerate(one_line_train_dataloader):
-                # get the inputs
+                # Get the inputs
                 for k, v in batch.items():
                     batch[k] = v.to(device)
 
-                # forward + backward + optimize
+                # Forward + backward + optimize
                 outputs = model(**batch)
                 loss = outputs.loss
                 loss.backward()
@@ -117,14 +139,16 @@ def train(config_trOCR):
             # Log average loss for the epoch
             writer.add_scalar("TrOCR/Average_Train_Loss", avg_train_loss, loop_idx)
 
-            # evaluate
+            # Evaluate model 
             model.eval()
             valid_cer = 0.0
             with torch.no_grad():
                 for batch in one_line_eval_dataloader:
-                    # run batch generation
+
+                    # Run batch generation
                     outputs = model.generate(batch["pixel_values"].to(device))
-                    # compute metrics
+
+                    # Compute metrics
                     cer = compute_cer(pred_ids=outputs, label_ids=batch["labels"], processor=processor)
                     valid_cer += cer
 
@@ -133,6 +157,9 @@ def train(config_trOCR):
 
             # Log validation CER to TensorBoard
             writer.add_scalar("TrOCR/Validation_CER", avg_valid_cer, loop_idx)
+
+            # Save checkpoint after each epoch
+            save_checkpoint(model, optimizer, loop_idx, avg_train_loss, avg_valid_cer, checkpoint_dir, config_trOCR["id"])
         
         
         # In the future we can add training of CRAFT model
@@ -169,7 +196,7 @@ def train(config_trOCR):
         # EVALUATION MODELS
         model.eval()
         results = evaluate_jointly(craft, model, page_val_dataset, processor, device)
-        print(f"Wspólne wyniki (CRAFT + TrOCR): {results}")
+        print(f"Common results (CRAFT + TrOCR): {results}")
         
         # Log joint evaluation metrics to TensorBoard
         writer.add_scalars("Evaluation", {
@@ -190,17 +217,17 @@ def train(config_trOCR):
 ### EVALUATE MODELS
 def evaluate_jointly(craft, trocr_model, craft_val_dataset, trocr_processor, device):
     """
-    Ewaluacja dwóch modeli jednocześnie (CRAFT + TrOCR).
+    Evaluation of two models simultaneously (CRAFT + TrOCR).
 
     Args:
-        craft: Model CRAFT do detekcji tekstu.
-        trocr_model: Model TrOCR do rozpoznawania tekstu.
-        craft_val_dataset: Zbiór danych walidacyjnych dla CRAFT.
-        trocr_processor: Processor TrOCR (do dekodowania predykcji).
-        device: Urządzenie obliczeniowe (CPU/GPU).
+        craft: CRAFT model for text detection.
+        trocr_model: TrOCR model for text recognition.
+        craft_val_dataset: Validation dataset for CRAFT.
+        trocr_processor: TrOCR processor (for decoding predictions).
+        device: Computing device (CPU/GPU).
 
     Returns:
-        dict: Wyniki metryk (CER, WER, LER).
+        dict: Metric results (CER, WER, LER).
     """
     cer_sum, wer_sum, ler_sum = 0.0, 0.0, 0.0
     num_samples = 0
@@ -209,19 +236,18 @@ def evaluate_jointly(craft, trocr_model, craft_val_dataset, trocr_processor, dev
     for i, (img, regions, transcriptions) in enumerate(craft_val_dataset):
         img = img.to(device) if isinstance(img, torch.Tensor) else img
 
-        # 1. Detekcja tekstu za pomocą CRAFT
+        # 1. Text detection using CRAFT
         img, detection_results = OCR.detection(img, craft)
 
-        # 2. Rozpoznawanie tekstu za pomocą TrOCR
+        # 2. Text recognition using TrOCR
         bboxes, recognized_texts = OCR.recoginition(img, detection_results, trocr_processor, trocr_model, device)
         
-        # 3. Przygotowanie ground truth
-        # `transcriptions` to lista tekstów przypisanych do każdego fragmentu (ground truth)
+        # 3. Prepare ground truth - transcriptions is a list of texts assigned to each region (ground truth)
         if len(recognized_texts) != len(transcriptions):
-            print(f"Warning: Mismatch in detected regions and ground truth. Skipping sample {i}.")
+            # print(f"Warning: Mismatch in detected regions and ground truth. Skipping sample {i}.")
             continue
         
-        # Obliczanie metryk dla każdego regionu
+        # Calculate metrics for each region
         for pred_text, true_text in zip(recognized_texts, transcriptions):
             if pred_text == "":
                 pred_text = 'a'
@@ -237,7 +263,7 @@ def evaluate_jointly(craft, trocr_model, craft_val_dataset, trocr_processor, dev
             ler_sum += ler
             num_regions += 1
 
-    # Oblicz średnie wyniki
+    # Calculate average results
     results = {
         "CER": cer_sum / num_regions if num_regions > 0 else 0.0,
         "WER": wer_sum / num_regions if num_regions > 0 else 0.0,
@@ -249,12 +275,15 @@ def run_experiments():
     
     
     hparams_combinations = [
-        {"batch_size": 8, "lr": 0.001, "num_epochs": 2, "max_target_length": 128},
-        {"batch_size": 4, "lr": 0.01, "num_epochs": 5, "max_target_length": 128},
+        {"id": 1, "batch_size": 8, "lr": 0.001, "num_epochs": 20, "max_target_length": 128},
+        {"id": 2, "batch_size": 4, "lr": 0.01, "num_epochs": 20, "max_target_length": 128},
     ]
     
     for config in hparams_combinations:
+        print("START TRAINING FOR CONFIGURATON:")
+        print(f"batch_size: {config['batch_size']}, lr: {config['lr']}, num_epochs: {config['num_epochs']}, max_target_length: {config['max_target_length']}")
         train(config)
+        print("FINISH TRAINING")
     
 run_experiments()
         
