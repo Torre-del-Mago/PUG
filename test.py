@@ -3,7 +3,8 @@ from craft_hw_ocr.craft_hw_ocr import OCR
 import cv2
 import numpy as np
 
-img = OCR.load_image('D:\\magisterka\\PUG\\splits\\training\\images\\2.png')
+# img = OCR.load_image('D:\\magisterka\\PUG\\splits\\training\\images\\2.png')
+img = OCR.load_image('/home/macierz/s184568/PUG/splits/training/images/2.png')
 
 # do the below step if your image is tilted by some angle else ignore
 # img = OCR.process_image(img)

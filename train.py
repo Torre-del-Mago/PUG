@@ -42,12 +42,12 @@ def train():
     }
     
     one_line_train_dataset = OCRDataset(
-        base_path="D:\\magisterka\\PUG\\splits\\training",
+        base_path="/home/macierz/s184568/PUG/splits/training",  # Zmieniono na Linuxową ścieżkę
         processor=processor,
         max_target_length=trOCR_train_config["max_target_length"]
     )
     one_line_eval_dataset = OCRDataset(
-        base_path="D:\\magisterka\\PUG\\splits\\validation",
+        base_path="/home/macierz/s184568/PUG/splits/validation",  # Zmieniono na Linuxową ścieżkę
         processor=processor,
         max_target_length=trOCR_train_config["max_target_length"]
     )
@@ -55,13 +55,14 @@ def train():
     one_line_eval_dataloader = DataLoader(one_line_eval_dataset, batch_size=trOCR_train_config["batch_size"])
 
     page_train_dataset = CraftDataset(
-        base_path="D:\\magisterka\\PUG\\splits", 
+        base_path="/home/macierz/s184568/PUG/splits",  # Zmieniono na Linuxową ścieżkę
         split="training"
     )
     page_val_dataset = CraftDataset(
-        base_path="D:\\magisterka\\PUG\\splits", 
+        base_path="/home/macierz/s184568/PUG/splits",  # Zmieniono na Linuxową ścieżkę
         split="validation"
     )
+
 
 
     loop_idx = 0
