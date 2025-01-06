@@ -95,12 +95,23 @@ The training script consists of the following key components:
 
 ## Sanity Check
 
-To validate the correctness of the training setup, the model is trained on a single batch to verify:
+To verify the correctness of the training setup, two different hyperparameter configurations were run, each with different `batch_size` values. The model is trained on a very small dataset for 20 epochs in each configuration. The goal is to ensure that the model can go through the training process and correctly log the results.
 
-- The model can overfit to this batch.
-- Loss decreases as expected.
+### Configurations:
 
-Sanity check results are logged to TensorBoard under the `runs/training_logs` directory.
+**Configuration 1:**
+- `batch_size`: 8
+- `lr`: 0.001
+- `num_epochs`: 20
+- `max_target_length`: 128
+
+**Configuration 2:**
+- `batch_size`: 4
+- `lr`: 0.01
+- `num_epochs`: 20
+- `max_target_length`: 128
+
+The sanity check results for both configurations are saved in TensorBoard under the `runs/training_logs/` directory, allowing for further analysis of the training process.
 
 ---
 
