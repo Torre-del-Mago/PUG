@@ -107,7 +107,7 @@ def get_prediction(
     polys_as_ratio = []
     for poly in polys:
         polys_as_ratio.append(poly / [img_width, img_height])
-    polys_as_ratio = np.array(polys_as_ratio)
+    polys_as_ratio = np.array(polys_as_ratio, dtype=object)
 
     text_score_heatmap = image_utils.cvt2HeatmapImg(score_text)
     link_score_heatmap = image_utils.cvt2HeatmapImg(score_link)
