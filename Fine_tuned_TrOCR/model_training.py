@@ -2,7 +2,7 @@ from transformers import TrOCRProcessor, AdamW
 import torch
 from transformers import VisionEncoderDecoderModel
 from tqdm.notebook import tqdm
-from Fine_tuned_TrOCR.eval_metric import compute_cer
+# from Fine_tuned_TrOCR.eval_metric import compute_cer
 
 def load_processor(path):
     """

@@ -7,6 +7,8 @@ from typing import Optional, Union
 import cv2
 import numpy as np
 
+import torch
+
 import craft_text_detector.file_utils as file_utils
 import craft_text_detector.torch_utils as torch_utils
 
@@ -36,7 +38,8 @@ def copyStateDict(state_dict):
 
 def load_craftnet_model(
         cuda: bool = False,
-        weight_path: Optional[Union[str, Path]] = None
+        weight_path: Optional[Union[str, Path]] = None,
+        gpu_id: int = 0
 ):
     # get craft net path
     if weight_path is None:
@@ -65,10 +68,12 @@ def load_craftnet_model(
 
     # arange device
     if cuda:
-        craft_net.load_state_dict(copyStateDict(torch_utils.load(weight_path)))
+        craft_net.load_state_dict(copyStateDict(torch_utils.load(weight_path, weights_only=True)))
 
-        craft_net = craft_net.cuda()
-        craft_net = torch_utils.DataParallel(craft_net)
+        # Ensure all model parameters are on the same GPU
+        device = torch.device(f'cuda:{gpu_id}')
+        craft_net = craft_net.to(device)
+        craft_net = torch_utils.DataParallel(craft_net, device_ids=[gpu_id])
         torch_utils.cudnn_benchmark = False
     else:
         craft_net.load_state_dict(
@@ -80,7 +85,8 @@ def load_craftnet_model(
 
 def load_refinenet_model(
         cuda: bool = False,
-        weight_path: Optional[Union[str, Path]] = None
+        weight_path: Optional[Union[str, Path]] = None,
+        gpu_id: int = 0
 ):
     # get refine net path
     if weight_path is None:
@@ -109,10 +115,12 @@ def load_refinenet_model(
 
     # arange device
     if cuda:
-        refine_net.load_state_dict(copyStateDict(torch_utils.load(weight_path)))
+        refine_net.load_state_dict(copyStateDict(torch_utils.load(weight_path, weights_only=True)))
 
-        refine_net = refine_net.cuda()
-        refine_net = torch_utils.DataParallel(refine_net)
+        # Ensure all model parameters are on the same GPU
+        device = torch.device(f'cuda:{gpu_id}')
+        refine_net = refine_net.to(device)
+        refine_net = torch_utils.DataParallel(refine_net, device_ids=[gpu_id])
         torch_utils.cudnn_benchmark = False
     else:
         refine_net.load_state_dict(

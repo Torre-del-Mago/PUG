@@ -1,9 +1,6 @@
 import evaluate
 
-cer_metric = evaluate.load("cer")
-wer_metric = evaluate.load("wer")
-
-def compute_cer(pred_ids, label_ids, processor):
+def compute_cer(pred_ids, label_ids, processor, cer_metric):
     """
     Compute the Character Error Rate (CER) between predicted and label sequences.
 

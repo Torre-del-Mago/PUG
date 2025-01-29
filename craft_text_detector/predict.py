@@ -17,6 +17,7 @@ def get_prediction(
     link_threshold: float = 0.4,
     low_text: float = 0.4,
     cuda: bool = False,
+    gpu_id: int = 0,
     long_size: int = 1280,
     poly: bool = True,
 ):
@@ -59,7 +60,7 @@ def get_prediction(
     x = torch_utils.from_numpy(x).permute(2, 0, 1)  # [h, w, c] to [c, h, w]
     x = torch_utils.Variable(x.unsqueeze(0))  # [c, h, w] to [b, c, h, w]
     if cuda:
-        x = x.cuda()
+        x = x.cuda(gpu_id)
     preprocessing_time = time.time() - t0
     t0 = time.time()
 

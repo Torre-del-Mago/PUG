@@ -3,10 +3,10 @@ from utilities import group_results_into_lines, draw_bboxes_and_lines
 from craft_text_detector import Craft
 from Fine_tuned_TrOCR.model_training import *
 import torch
-
+from PIL import Image, ImageDraw, ImageFont
 
 if __name__ == "__main__":
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
     device = torch.device(device)
     
     craft = Craft(output_dir=None, 
@@ -14,35 +14,42 @@ if __name__ == "__main__":
                     export_extra=False,
                     link_threshold=0.1,
                     text_threshold=0.3,
-                    cuda=torch.cuda.is_available())
+                    cuda=torch.cuda.is_available(),
+                    gpu_id=1)
     
     trOCR_path = "microsoft/trocr-base-handwritten"
-     
-    processor = load_processor(trOCR_path)
+    trOCR_path_checkpoint = "/mnt/raid/checkpoints/checkpoint_6.pth"
     
+    processor = load_processor(trOCR_path)
     model = load_model(trOCR_path, device)
     model.config.decoder_start_token_id = processor.tokenizer.cls_token_id
     model.config.pad_token_id = processor.tokenizer.pad_token_id
-    # img = OCR.load_image('D:\\magisterka\\PUG\\splits\\training\\images\\2.png')
+
+    checkpoint = torch.load(trOCR_path_checkpoint)
+    model.load_state_dict(checkpoint['model_state_dict'])
+
+    # img = OCR.load_image('/mnt/raid/splits/test_original/images/0020.jpg')
+    img = OCR.load_image('/mnt/raid/splits/test/images/118.png')
+
+    img, results = OCR.detection(img, craft)
+    grouped_lines = group_results_into_lines(results, y_tolerance=6, x_tolerance=500)
     
-    # do the below step if your image is tilted by some angle else ignore
-    # img = OCR.process_image(img)
-    for i in range(10,15):
-        img = OCR.load_image(f'splits/training/images/{i}.png')
+    draw_bboxes_and_lines(img, results, grouped_lines, output_dir="test_img_boxes", image_name=f"test_original_20.png")
 
-        img, results = OCR.detection(img, craft)
-        print(results["boxes"])
+    bboxes, text = OCR.recoginition(img, grouped_lines, processor, model, device)
 
-        grouped_lines = group_results_into_lines(results, y_tolerance=6, x_tolerance=500)
-        print(grouped_lines["boxes"])
+    print(text)
+    
+    # Rysowanie rozpoznanego tekstu na obrazie
+    pilImage = OCR.visualize(img, results)
+    draw = ImageDraw.Draw(pilImage)
 
-        draw_bboxes_and_lines(img, results,  grouped_lines, output_dir="test_img_boxes", image_name=f"test_image_{i}.png")
+    for bbox, txt in zip(bboxes, text):
+        x_min = int(min(bbox[:, 0]))  # Najmniejsza wartość x
+        y_min = int(min(bbox[:, 1]))  # Najmniejsza wartość y
+        x_max = int(max(bbox[:, 0]))  # Największa wartość x
+        y_max = int(max(bbox[:, 1]))  # Największa wartość y
 
-        bboxes, text = OCR.recoginition(img, grouped_lines, processor, model, device)
-
-        # print(text)
-        # print(type(text))  
-
-        pilImage = OCR.visualize(img, results)
-
-        OCR.save_image(pilImage, "test.png")
+        draw.text((x_min, y_min - 10), str(txt), fill=(255, 0, 0)) 
+    
+    OCR.save_image(pilImage, "test_with_text_2.png")

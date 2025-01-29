@@ -5,7 +5,7 @@ from Fine_tuned_TrOCR.model_training import *
 from Fine_tuned_TrOCR.eval_metric import *
 from torch.utils.data import DataLoader
 from OCR_dataset import OCRDataset
-from craft_dataset import CraftDataset
+from random_craft_dataset import CraftDataset 
 from torch.utils.tensorboard import SummaryWriter
 from transformers import logging
 from checkpoint import *
@@ -18,14 +18,14 @@ logging.set_verbosity_error()
 warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
 
-def log_hparams(writer, trOCR_train_config, avg_train_loss, avg_valid_cer, avg_eval_metrics, loop_idx):
+def log_hparams(writer, config_trOCR, avg_train_loss, avg_valid_cer, avg_eval_metrics, loop_idx):
     """Logging hyperparameters and results to TensorBoard."""
     
     hparams = {
-        'batch_size': trOCR_train_config["batch_size"],
-        'lr': trOCR_train_config["lr"],
-        'num_epochs': trOCR_train_config["num_epochs"],
-        'max_target_length': trOCR_train_config["max_target_length"]
+        'batch_size': config_trOCR["batch_size"],
+        'lr': config_trOCR["lr"],
+        'num_epochs': config_trOCR["num_epochs"],
+        'max_target_length': config_trOCR["max_target_length"]
     }
     
     # Add hyperparameters and results
@@ -34,7 +34,8 @@ def log_hparams(writer, trOCR_train_config, avg_train_loss, avg_valid_cer, avg_e
         'valid_cer_trocr': avg_valid_cer,
         'eval_cer': avg_eval_metrics["CER"],
         'eval_wer': avg_eval_metrics["WER"],
-        'eval_ler': avg_eval_metrics["LER"]
+        'eval_ler': avg_eval_metrics["LER"],
+        'experiment_id': config_trOCR["id"] 
     }
     
     # Log hparams and metrics
@@ -43,17 +44,15 @@ def log_hparams(writer, trOCR_train_config, avg_train_loss, avg_valid_cer, avg_e
 
 
 ### TRAIN MODELS
-def train(config_trOCR):
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(device)
-    device = torch.device(device)
+def train(config_trOCR, device):
     
     craft = Craft(output_dir=None, 
                     crop_type="poly",
                     export_extra=False,
                     link_threshold=0.1,
                     text_threshold=0.3,
-                    cuda=torch.cuda.is_available())
+                    cuda=torch.cuda.is_available(),
+                    gpu_id=config_trOCR['gpu_id'])
     
     trOCR_path = "microsoft/trocr-base-handwritten"
      
@@ -63,67 +62,58 @@ def train(config_trOCR):
     model.config.decoder_start_token_id = processor.tokenizer.cls_token_id
     model.config.pad_token_id = processor.tokenizer.pad_token_id
     
-    trOCR_train_config = {
-        "batch_size": config_trOCR["batch_size"],
-        "lr": config_trOCR["lr"],
-        "num_epochs": config_trOCR["num_epochs"],
-        "max_target_length": config_trOCR["max_target_length"]
-    }
-    optimizer = torch.optim.AdamW(model.parameters(), lr=trOCR_train_config["lr"])
-
-    # craft_train_config = {
-    #     "batch_size": 8,
-    #     "lr": 0.001,
-    #     "num_epochs": num_epochs,
-    # }
-
-    one_line_train_dataset = OCRDataset(
-        base_path="splits/test",
-        processor=processor,
-        max_target_length=trOCR_train_config["max_target_length"]
-    )
-    one_line_eval_dataset = OCRDataset(
-        base_path="splits/test",
-        processor=processor,
-        max_target_length=trOCR_train_config["max_target_length"]
-    )
-    one_line_train_dataloader = DataLoader(one_line_train_dataset, batch_size=trOCR_train_config["batch_size"], shuffle=True)
-    one_line_eval_dataloader = DataLoader(one_line_eval_dataset, batch_size=trOCR_train_config["batch_size"])
-
-    page_train_dataset = CraftDataset(
-        base_path="splits",
-        split="test"
-    )
-    page_val_dataset = CraftDataset(
-        base_path="splits",
-        split="test"
-    )
-
-    # TensorBoard writer
-    writer = SummaryWriter(log_dir="runs/training_logs")
-
-    loop_idx = 0
-
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config_trOCR["lr"])
+    
     # Optionally load from checkpoint
-    checkpoint_dir = "checkpoints"
+    checkpoint_dir = "/mnt/raid/checkpoints"
     checkpoint_files = os.listdir(checkpoint_dir)
     checkpoint_file_id = f"checkpoint_{config_trOCR['id']}.pth"
 
     if checkpoint_file_id in checkpoint_files:
-        checkpoint_path = os.path.join(checkpoint_dir, checkpoint_file)
-        start_epoch, avg_train_loss, avg_valid_cer = load_checkpoint(model, optimizer, checkpoint_path)
+        checkpoint_path = os.path.join(checkpoint_dir, checkpoint_file_id)
+        start_epoch, avg_train_loss, avg_valid_cer = load_checkpoint(model, optimizer, checkpoint_path, config_trOCR)
         loop_idx = start_epoch  # Continue from the last epoch
     else:
-        print(f"Checkpoint {checkpoint_file_id} not found. Starting training from scratch.")
+        # print(f"Checkpoint {checkpoint_file_id} not found. Starting training from scratch.")
         loop_idx = 0
+
+    one_line_train_dataset = OCRDataset(
+        base_path="/mnt/raid/splits/test",
+        processor=processor,
+        max_target_length=config_trOCR["max_target_length"]
+    )
+    one_line_eval_dataset = OCRDataset(
+        base_path="/mnt/raid/splits/validation",
+        processor=processor,
+        max_target_length=config_trOCR["max_target_length"]
+    )
+    one_line_train_dataloader = DataLoader(one_line_train_dataset, batch_size=config_trOCR["batch_size"], shuffle=True)
+    one_line_eval_dataloader = DataLoader(one_line_eval_dataset, batch_size=config_trOCR["batch_size"])
+
+    page_train_dataset = CraftDataset(
+        base_path="/mnt/raid/splits",
+        split="test"
+    )
+    page_val_dataset = CraftDataset(
+        base_path="/mnt/raid/splits",
+        split="validation"
+    )
+
+    # TensorBoard writer
+    writer = SummaryWriter(log_dir="/mnt/raid/runs/training_logs")
 
     while True:
         
         ### TRAIN TROCR
-        if loop_idx < trOCR_train_config["num_epochs"]:
+        if loop_idx < config_trOCR["num_epochs"]:
+            page_val_dataset.refresh_samples()
             model.train()
-            train_loss = 0.0
-            for batch_idx, batch in enumerate(tqdm(one_line_train_dataloader, desc=f"Training Epoch {loop_idx+1}")):
+            train_loss = 0.0         
+            # for batch_idx, batch in enumerate(tqdm(one_line_train_dataloader, desc=f"Training Epoch {loop_idx+1}")):
+            # counter = 0
+            for batch_idx, batch in enumerate(one_line_train_dataloader):   
+                # if counter == 10:
+                #     break           
                 # Get the inputs
                 for k, v in batch.items():
                     batch[k] = v.to(device)
@@ -136,12 +126,12 @@ def train(config_trOCR):
                 optimizer.zero_grad()
 
                 train_loss += loss.item()
-
+                # counter += 1
                 # Log loss to TensorBoard
                 writer.add_scalar(f"TrOCR/Train_Loss_{config_trOCR['id']}", loss.item(), loop_idx * len(one_line_train_dataloader) + batch_idx)
 
             avg_train_loss = train_loss / len(one_line_train_dataloader)
-            print(f"Loss after epoch {loop_idx+1}:", avg_train_loss)
+            # print(f"Loss after epoch {loop_idx+1}:", avg_train_loss)
 
             # Log average loss for the epoch
             writer.add_scalar(f"TrOCR/Average_Train_Loss_{config_trOCR['id']}", avg_train_loss, loop_idx)
@@ -150,23 +140,28 @@ def train(config_trOCR):
             model.eval()
             valid_cer = 0.0
             with torch.no_grad():
-                for batch in tqdm(one_line_eval_dataloader, desc=f"Evaluating Epoch {loop_idx+1}"):
-
+                # for batch in tqdm(one_line_eval_dataloader, desc=f"Evaluating Epoch {loop_idx+1}"):
+                cer_metric = evaluate.load("cer")
+                # counter = 0
+                for batch in one_line_eval_dataloader:
+                    # if counter == 10:
+                    #     break
                     # Run batch generation
                     outputs = model.generate(batch["pixel_values"].to(device))
 
                     # Compute metrics
-                    cer = compute_cer(pred_ids=outputs, label_ids=batch["labels"], processor=processor)
+                    cer = compute_cer(pred_ids=outputs, label_ids=batch["labels"], processor=processor, cer_metric=cer_metric)
                     valid_cer += cer
+                    # counter += 1
 
             avg_valid_cer = valid_cer / len(one_line_eval_dataloader)
-            print("Validation CER:", avg_valid_cer)
+            # print("Validation CER:", avg_valid_cer)
 
             # Log validation CER to TensorBoard
             writer.add_scalar(f"TrOCR/Validation_CER_{config_trOCR['id']}", avg_valid_cer, loop_idx)
 
             # Save checkpoint after each epoch
-            save_checkpoint(model, optimizer, loop_idx, avg_train_loss, avg_valid_cer, checkpoint_dir, config_trOCR["id"])
+            save_checkpoint(model, optimizer, loop_idx, avg_train_loss, avg_valid_cer, config_trOCR, checkpoint_dir)
         
         
         # In the future we can add training of CRAFT model
@@ -203,23 +198,25 @@ def train(config_trOCR):
         # EVALUATION MODELS
         model.eval()
         results = evaluate_jointly(craft, model, page_val_dataset, processor, device)
-        print(f"Common results (CRAFT + TrOCR): {results}")
+        # print(f"Common results (CRAFT + TrOCR): {results}")
         
         # Log joint evaluation metrics to TensorBoard
-        writer.add_scalars("Evaluation", {
+        writer.add_scalars(f"Evaluation_{config_trOCR['id']}", {
             "CER": results["CER"],
             "WER": results["WER"],
             "LER": results["LER"]
         }, loop_idx)
 
-        log_hparams(writer, trOCR_train_config, avg_train_loss, avg_valid_cer, results, loop_idx)
+        log_hparams(writer, config_trOCR, avg_train_loss, avg_valid_cer, results, loop_idx)
 
         loop_idx += 1
-        if loop_idx >= trOCR_train_config["num_epochs"]:
+        if loop_idx >= config_trOCR["num_epochs"]:
             break
-
+    
     # Close the writer
     writer.close()
+    
+    return results
     
 ### EVALUATE MODELS
 def evaluate_jointly(craft, trocr_model, craft_val_dataset, trocr_processor, device):
@@ -239,21 +236,24 @@ def evaluate_jointly(craft, trocr_model, craft_val_dataset, trocr_processor, dev
     cer_sum, wer_sum, ler_sum = 0.0, 0.0, 0.0
     num_samples = 0
     num_regions = 0
-    counter = 0
+    
+    cer_metric = evaluate.load("cer")
+    wer_metric = evaluate.load("wer")
 
-    for i, (img, regions, transcriptions) in enumerate(tqdm(craft_val_dataset, desc="Evaluating Craft Dataset")):
+    # for i, (img, regions, transcriptions) in enumerate(tqdm(craft_val_dataset, desc="Evaluating Craft Dataset")):
+    # counter = 0
+    for i, (img, regions, transcriptions) in enumerate(craft_val_dataset):
+        # if counter == 10:
+        #     break
+        # counter += 1
+        
         img = img.to(device) if isinstance(img, torch.Tensor) else img
 
         # 1. Text detection using CRAFT
         img, detection_results = OCR.detection(img, craft)
 
         # Group the bounding boxes into lines
-        grouped_lines = group_results_into_lines(detection_results["boxes"], y_tolerance=10, x_tolerance=20)
-
-        if counter < 10:
-            draw_bboxes_and_lines(img, detection_results, grouped_lines, output_dir="test_img_boxes", image_name=f"box_img_{counter}.png")
-
-        counter = counter + 1
+        grouped_lines = group_results_into_lines(detection_results, y_tolerance=6, x_tolerance=500)
 
         # 2. Text recognition using TrOCR
         bboxes, recognized_texts = OCR.recoginition(img, grouped_lines, trocr_processor, trocr_model, device)
@@ -289,16 +289,20 @@ def evaluate_jointly(craft, trocr_model, craft_val_dataset, trocr_processor, dev
 
 
 def run_experiments():
+    
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # print(device)
+    device = torch.device(device)
       
     hparams_combinations = [
-        {"id": 1, "batch_size": 8, "lr": 0.001, "num_epochs": 20, "max_target_length": 128},
+        {"id": 1, "batch_size": 10, "lr": 0.001, "num_epochs": 20, "max_target_length": 128},
         {"id": 2, "batch_size": 4, "lr": 0.01, "num_epochs": 20, "max_target_length": 128},
     ]
     
     for config in hparams_combinations:
         print("START TRAINING FOR CONFIGURATON:")
         print(f"batch_size: {config['batch_size']}, lr: {config['lr']}, num_epochs: {config['num_epochs']}, max_target_length: {config['max_target_length']}")
-        train(config)
+        train(config, device)
         print("FINISH TRAINING")
   
 if __name__ == "__main__":    
